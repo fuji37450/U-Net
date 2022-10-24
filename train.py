@@ -8,9 +8,11 @@ import os
 import time
 from tqdm import tqdm
 
-from data.dataloader import SignatureLoader
+from dataloader import SignatureLoader
 from model.unet import UNet
 from utils import *
+
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 if torch.cuda.is_available():
     device = 'cuda'
@@ -30,15 +32,15 @@ def train():
     torch.manual_seed(1)
 
     train_set = SignatureLoader(
-        imgs_root=args.imgs_dir, masks_root=args.masks_dir)
+        imgs_root=args.imgs_dir, masks_root=args.masks_dir, scale=0.25)
     test_set = SignatureLoader(
-        imgs_root='data/BCSD/TestSet/X_crop_resize', masks_root='data/BCSD/TestSet/y_crop_resize')
+        imgs_root='data/BCSD/TestSet/X_crop_resize', masks_root='data/BCSD/TestSet/y_crop_resize', scale=0.25)
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = torch.utils.data.DataLoader(
         test_set, batch_size=2*BATCH_SIZE, shuffle=False)
 
-    model = UNet().to(device)
+    model = UNet(n_channels=3, n_classes=1).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.RMSprop(
@@ -51,7 +53,7 @@ def train():
     criterion = criterion.to(device)
     iter_n = 0
     t = time.strftime("%m-%d-%H-%M", time.localtime())
-    print(len(train_loader))
+
     best_test_score = 0
     for epoch in tqdm(range(1, EPOCHS + 1)):
         for i, (imgs, true_masks) in enumerate(tqdm(train_loader)):
@@ -60,10 +62,9 @@ def train():
             optimizer.zero_grad()
 
             imgs, true_masks = imgs.to(device), true_masks.to(device)
-
             masks_pred = model(imgs)
 
-            loss = criterion(masks_pred, true_masks) \
+            loss = criterion(masks_pred.reshape(32, 128, 128), true_masks) \
                 + dice_loss(F.softmax(masks_pred, dim=1).float(),
                             F.one_hot(true_masks, model.n_classes).permute(
                                 0, 3, 1, 2).float(),
