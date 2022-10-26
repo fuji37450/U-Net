@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import os
+import cv2
 
 
 def parse_args():
@@ -58,8 +59,9 @@ def print_metrics(metrics, epoch_samples, phase='Train'):
 
 
 def plot_side_by_side(img_arrays, filedir):
+    filedir = filedir[:-1] + '+otsu/'
     os.mkdir(filedir)
-    nrow, ncol = 1, 3
+    nrow, ncol = 1, 4
 
     for i in range(len(img_arrays[0])):
         _, plots = plt.subplots(nrow, ncol, sharex='all', sharey='all', figsize=(ncol * 4, nrow * 4))
@@ -69,9 +71,12 @@ def plot_side_by_side(img_arrays, filedir):
         x = x.swapaxes(1, 2)
         pred_y = pred_y.swapaxes(0, 1)
         pred_y = pred_y.swapaxes(1, 2)
-        
+
+        _, pred_yo = cv2.threshold((pred_y * 255).astype("uint8"), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
         plots[0].imshow(x)
         plots[1].imshow(y, cmap='gray')
         plots[2].imshow(pred_y, cmap='gray')
+        plots[3].imshow(pred_yo, cmap='gray')
         plt.savefig(f'{filedir}{i}')
         plt.close()

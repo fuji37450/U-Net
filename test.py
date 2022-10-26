@@ -23,15 +23,15 @@ else:
         imgs_root='data/BCSD/TestSet/X_crop_resize', masks_root='data/BCSD/TestSet/y_crop_resize', scale=0.25)
     loader = torch.utils.data.DataLoader(set, batch_size=BATCH_SIZE, shuffle=False)
 
-# Get the first batch
-inputs, labels = next(iter(loader))
-inputs = inputs.to(device)
-labels = labels.to(device)
+for i, (inputs, labels) in enumerate(loader):
+    # Get the first batch
+    inputs = inputs.to(device)
+    labels = labels.to(device)
 
-# Predict
-pred = model(inputs)
-# The loss functions include the sigmoid function.
-pred = torch.sigmoid(pred)
-pred = pred.data.cpu().numpy()
+    # Predict
+    pred = model(inputs)
+    # The loss functions include the sigmoid function.
+    pred = torch.sigmoid(pred)
+    pred = pred.data.cpu().numpy()
 
-plot_side_by_side([inputs.cpu().numpy(), labels.cpu().numpy(), pred], filedir=f'imgs/{model_name}/')
+    plot_side_by_side([inputs.cpu().numpy(), labels.cpu().numpy(), pred], filedir=f'imgs/{model_name}__{i}/')
