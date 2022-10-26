@@ -1,4 +1,6 @@
 data/
+imgs/
+pths/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
