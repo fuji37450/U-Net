@@ -1,8 +1,11 @@
-import argparse
 import torch
-from torch import Tensor
+import argparse
 import torch.nn.functional as F
-from tqdm import tqdm
+from functools import reduce
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+import os
 
 
 def parse_args():
@@ -11,86 +14,64 @@ def parse_args():
                         help='directory of images')
     parser.add_argument('--masks_dir', default='data/BCSD/TrainSet/y_crop_resize', type=str,
                         help='directory of ground truth masks')
-    parser.add_argument('--n_epoch', default=5, type=int,
+    parser.add_argument('--n_epoch', default=60, type=int,
                         help='number of epoch to train')
     args = parser.parse_args()
     return args
 
 
-def dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
-    # Average of Dice coefficient for all batches, or for a single mask
-    assert input.size() == target.size()
-    if input.dim() == 2 and reduce_batch_first:
-        raise ValueError(
-            f'Dice: asked to reduce batch but got tensor without batch dimension (shape {input.shape})')
+def dice_loss(pred, target, smooth=1.):
+    pred = pred
+    target = target
 
-    if input.dim() == 2 or reduce_batch_first:
-        inter = torch.dot(input.reshape(-1), target.reshape(-1))
-        sets_sum = torch.sum(input) + torch.sum(target)
-        if sets_sum.item() == 0:
-            sets_sum = 2 * inter
-
-        return (2 * inter + epsilon) / (sets_sum + epsilon)
-    else:
-        # compute and average metric for each batch element
-        dice = 0
-        for i in range(input.shape[0]):
-            dice += dice_coeff(input[i, ...], target[i, ...])
-        return dice / input.shape[0]
+    intersection = (pred * target).sum(2)
+    loss = 1 - ((2. * intersection + smooth) / (pred.sum(2) + target.sum(2) + smooth))
+    
+    return loss.mean()
 
 
-def multiclass_dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
-    # Average of Dice coefficient for all classes
-    assert input.size() == target.size()
-    dice = 0
-    for channel in range(input.shape[1]):
-        dice += dice_coeff(input[:, channel, ...], target[:,
-                                                          channel, ...], reduce_batch_first, epsilon)
+def calc_loss(pred, target, metrics, bce_weight=0.5):
+    try:
+        pred = pred.reshape(target.size()[0], 128, 128)
+    except:
+        print(pred.size(), target.size())
+    bce = F.binary_cross_entropy_with_logits(pred, target.float())
 
-    return dice / input.shape[1]
+    pred = torch.sigmoid(pred)
+    dice = dice_loss(pred, target)
+
+    loss = bce * bce_weight + dice * (1 - bce_weight)
+
+    metrics['bce'] += bce.data.cpu().numpy() * target.size(0)
+    metrics['dice'] += dice.data.cpu().numpy() * target.size(0)
+    metrics['loss'] += loss.data.cpu().numpy() * target.size(0)
+
+    return loss
 
 
-def dice_loss(input: Tensor, target: Tensor, multiclass: bool = False):
-    # Dice loss (objective to minimize) between 0 and 1
-    assert input.size() == target.size()
-    fn = multiclass_dice_coeff if multiclass else dice_coeff
-    return 1 - fn(input, target, reduce_batch_first=True)
+def print_metrics(metrics, epoch_samples, phase='Train'):
+    outputs = []
+    for k in metrics.keys():
+        outputs.append('{}: {:4f}'.format(k, metrics[k] / epoch_samples))
+
+    print('{}: {}'.format(phase, ', '.join(outputs)))
 
 
-def evaluate(net, dataloader, device):
-    net.eval()
-    num_val_batches = len(dataloader)
-    dice_score = 0
+def plot_side_by_side(img_arrays, filedir):
+    os.mkdir(filedir)
+    nrow, ncol = 1, 3
 
-    # iterate over the validation set
-    for batch in tqdm(dataloader, total=num_val_batches, desc='Validation round', unit='batch', leave=False):
-        image, mask_true = batch['image'], batch['mask']
-        # move images and labels to correct device and type
-        image = image.to(device=device, dtype=torch.float32)
-        mask_true = mask_true.to(device=device, dtype=torch.long)
-        mask_true = F.one_hot(mask_true, net.n_classes).permute(
-            0, 3, 1, 2).float()
-
-        with torch.no_grad():
-            # predict the mask
-            mask_pred = net(image)
-
-            # convert to one-hot format
-            if net.n_classes == 1:
-                mask_pred = (F.sigmoid(mask_pred) > 0.5).float()
-                # compute the Dice score
-                dice_score += dice_coeff(mask_pred,
-                                         mask_true, reduce_batch_first=False)
-            else:
-                mask_pred = F.one_hot(mask_pred.argmax(
-                    dim=1), net.n_classes).permute(0, 3, 1, 2).float()
-                # compute the Dice score, ignoring background
-                dice_score += multiclass_dice_coeff(
-                    mask_pred[:, 1:, ...], mask_true[:, 1:, ...], reduce_batch_first=False)
-
-    net.train()
-
-    # Fixes a potential division by zero error
-    if num_val_batches == 0:
-        return dice_score
-    return dice_score / num_val_batches
+    for i in range(len(img_arrays[0])):
+        _, plots = plt.subplots(nrow, ncol, sharex='all', sharey='all', figsize=(ncol * 4, nrow * 4))
+        plt.setp(plots, xticks=[], yticks=[]) 
+        x, y, pred_y = img_arrays[0][i], img_arrays[1][i], img_arrays[2][i]
+        x = x.swapaxes(0, 1)
+        x = x.swapaxes(1, 2)
+        pred_y = pred_y.swapaxes(0, 1)
+        pred_y = pred_y.swapaxes(1, 2)
+        
+        plots[0].imshow(x)
+        plots[1].imshow(y, cmap='gray')
+        plots[2].imshow(pred_y, cmap='gray')
+        plt.savefig(f'{filedir}{i}')
+        plt.close()

@@ -1,6 +1,5 @@
 from torch.utils import data
 import torch
-import cv2
 import os
 from PIL import Image
 import numpy as np
@@ -41,7 +40,7 @@ class SignatureLoader(data.Dataset):
 
     def __getitem__(self, idx):
         name = self.ids[idx]
-        img = Image.open(os.path.join(self.imgs_root, f'X_{name}.jpeg'))
+        img = Image.open(os.path.join(self.imgs_root, f'X_{name}.jpeg')).convert('RGB')
         mask = Image.open(os.path.join(self.masks_root, f'y_{name}.jpeg')).convert('L')
         img = self.preprocess(img, self.scale, is_mask=False)
         mask = self.preprocess(mask, self.scale, is_mask=True)
