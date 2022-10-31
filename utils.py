@@ -3,8 +3,6 @@ import argparse
 import torch.nn.functional as F
 from functools import reduce
 import matplotlib.pyplot as plt
-import numpy as np
-from PIL import Image
 import os
 import cv2
 
@@ -15,7 +13,7 @@ def parse_args():
                         help='directory of images')
     parser.add_argument('--masks_dir', default='data/BCSD/TrainSet/y_crop_resize', type=str,
                         help='directory of ground truth masks')
-    parser.add_argument('--n_epoch', default=60, type=int,
+    parser.add_argument('--n_epoch', default=100, type=int,
                         help='number of epoch to train')
     args = parser.parse_args()
     return args
@@ -32,10 +30,8 @@ def dice_loss(pred, target, smooth=1.):
 
 
 def calc_loss(pred, target, metrics, bce_weight=0.5):
-    try:
-        pred = pred.reshape(target.size()[0], 128, 128)
-    except:
-        print(pred.size(), target.size())
+    
+    pred = pred.reshape(target.size()[0], 128, 128)
     bce = F.binary_cross_entropy_with_logits(pred, target.float())
 
     pred = torch.sigmoid(pred)
@@ -59,24 +55,28 @@ def print_metrics(metrics, epoch_samples, phase='Train'):
 
 
 def plot_side_by_side(img_arrays, filedir):
-    filedir = filedir[:-1] + '+otsu/'
     os.mkdir(filedir)
-    nrow, ncol = 1, 4
-
+    nrow, ncol = 1, (len(img_arrays) + 2)
+    
     for i in range(len(img_arrays[0])):
         _, plots = plt.subplots(nrow, ncol, sharex='all', sharey='all', figsize=(ncol * 4, nrow * 4))
         plt.setp(plots, xticks=[], yticks=[]) 
-        x, y, pred_y = img_arrays[0][i], img_arrays[1][i], img_arrays[2][i]
+        x, y, pred_y, pred_refine_y = img_arrays[0][i], img_arrays[1][i], img_arrays[2][i], img_arrays[3][i]
+        
         x = x.swapaxes(0, 1)
         x = x.swapaxes(1, 2)
         pred_y = pred_y.swapaxes(0, 1)
         pred_y = pred_y.swapaxes(1, 2)
-
-        _, pred_yo = cv2.threshold((pred_y * 255).astype("uint8"), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        pred_refine_y = pred_refine_y.swapaxes(0, 1)
+        pred_refine_y = pred_refine_y.swapaxes(1, 2)
+        _, pred_yo = cv2.threshold((pred_y * 255).astype('uint8'), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        _, pred_refine_yo = cv2.threshold((pred_refine_y * 255).astype('uint8'), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
         plots[0].imshow(x)
         plots[1].imshow(y, cmap='gray')
         plots[2].imshow(pred_y, cmap='gray')
         plots[3].imshow(pred_yo, cmap='gray')
+        plots[4].imshow(pred_refine_y, cmap='gray')
+        plots[5].imshow(pred_refine_yo, cmap='gray')
         plt.savefig(f'{filedir}{i}')
         plt.close()

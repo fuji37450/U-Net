@@ -11,7 +11,27 @@ def double_conv(in_channels, out_channels):
         nn.ReLU(inplace=True),
         nn.Conv2d(out_channels, out_channels, 3, padding=1),
         nn.ReLU(inplace=True)
-    )   
+    )
+
+
+class Refine(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv_relu = nn.Sequential(
+            nn.BatchNorm2d(4),
+            nn.Conv2d(4, 64, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(64),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(64),
+        )
+        self.conv_last = nn.Conv2d(64, 1, 3, padding=1)
+
+    def forward(self, raw_alpha, x):
+        x = torch.cat([x, raw_alpha], dim=1)
+        x = self.conv_relu(x)
+        return self.conv_last(x)
 
 
 class UNet(nn.Module):
