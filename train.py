@@ -33,14 +33,16 @@ def train():
         train_set, batch_size=BATCH_SIZE, shuffle=True)
 
     model = UNet(n_class=1).to(device)
+    if args.model_name != '':
+        model.load_state_dict(torch.load(f'pths/{args.model_name}.pth'))
 
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4)
+    optimizer = optim.Adam(filter(
+        lambda p: p.requires_grad, model.parameters()), lr=1e-5, weight_decay=1e-5)
 
-    
     best_train_loss = 1e10
     for _ in tqdm(range(1, EPOCHS + 1)):
         epoch_samples = 0
-        
+
         for imgs, true_masks in train_loader:
             model.train()
             metrics = defaultdict(float)
@@ -59,9 +61,10 @@ def train():
 
         train_loss = metrics['dice'] / epoch_samples
         if train_loss < best_train_loss:
-            print("saving best train model")
+            print(f'saving best train model: {metrics["dice"]:.2f}')
             best_train_loss = train_loss
-            torch.save(model.state_dict(), f'pths/train_{metrics["dice"]:.2f}.pth')
+            torch.save(model.state_dict(),
+                       f'pths/train_BSCD_{metrics["dice"]:.2f}.pth')
         print_metrics(metrics, epoch_samples)
 
 
