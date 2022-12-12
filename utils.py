@@ -5,6 +5,7 @@ from functools import reduce
 import matplotlib.pyplot as plt
 import os
 import cv2
+import numpy as np
 
 
 def parse_args():
@@ -64,6 +65,27 @@ def print_metrics(metrics, epoch_samples, phase='Train'):
     print('{}: {}'.format(phase, ', '.join(outputs)))
 
 
+def swap_func(x):
+    '''
+    x: np array
+    '''
+    return x.swapaxes(0, 1).swapaxes(1, 2)
+
+
+def get_mask_from_pred(x):
+    return cv2.threshold((x * 255).astype('uint8'), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+
+
+def get_masked_image(img, mask):
+    masked_img = cv2.bitwise_and(img, img, mask=mask)
+    background = np.full(img.shape, 255, dtype=np.uint8)
+    mask = cv2.bitwise_not(mask)
+    masked_background = cv2.bitwise_and(background, background, mask=mask)
+    result = cv2.bitwise_or(
+        (masked_img * 255).astype('uint8'), masked_background)
+    return np.asarray(result)
+
+
 def plot_side_by_side(img_arrays, filedir):
     os.mkdir(filedir)
     nrow, ncol = 1, len(img_arrays)
@@ -72,23 +94,12 @@ def plot_side_by_side(img_arrays, filedir):
         _, plots = plt.subplots(nrow, ncol, sharex='all',
                                 sharey='all', figsize=(ncol * 4, nrow * 4))
         plt.setp(plots, xticks=[], yticks=[])
-        x, y, pred_y = img_arrays[0][i], img_arrays[1][i], img_arrays[2][i]
 
-        x = x.swapaxes(0, 1).swapaxes(1, 2)
-        pred_y = pred_y.swapaxes(0, 1).swapaxes(1, 2)
-        _, pred_y = cv2.threshold(
-            (pred_y * 255).astype('uint8'), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-
-        plots[0].imshow(x)
-        plots[1].imshow(y, cmap='gray')
-        plots[2].imshow(pred_y, cmap='gray')
-
-        if ncol == 4:
-            pred_refine_y = img_arrays[3][i]
-            pred_refine_y = pred_refine_y.swapaxes(0, 1).swapaxes(1, 2)
-            _, pred_refine_y = cv2.threshold(
-                (pred_refine_y * 255).astype('uint8'), 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-            plots[3].imshow(pred_refine_y, cmap='gray')
+        for col in range(ncol):
+            if col == 0:
+                plots[col].imshow(img_arrays[col][i])
+            else:
+                plots[col].imshow(img_arrays[col][i], cmap='gray')
 
         plt.savefig(f'{filedir}{i}')
         plt.close()
