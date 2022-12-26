@@ -14,7 +14,11 @@ def parse_args():
                         help='directory of images')
     parser.add_argument('--masks_dir', default='data/BCSD/TrainSet/y_crop_resize', type=str,
                         help='directory of ground truth masks')
+    parser.add_argument('--result_dir', default='',
+                        type=str, help='directory of segmented image')
     parser.add_argument('--n_epoch', default=100, type=int,
+                        help='number of epoch to train')
+    parser.add_argument('--batch_size', default=32, type=int,
                         help='number of epoch to train')
     parser.add_argument('--model_name', default='',
                         type=str, help='pretrain model name')
