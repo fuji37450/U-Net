@@ -71,4 +71,6 @@ class SignatureLoader(data.Dataset):
         mask = Image.open(os.path.join(
             self.masks_root, mask_name)).convert('L').resize((512, 512))
         mask = self.preprocess(mask, self.scale, is_mask=True)
+        if self.mode == 'valid':
+            return torch.FloatTensor(np.array(img)), torch.LongTensor(np.array(mask)), name
         return torch.FloatTensor(np.array(img)), torch.LongTensor(np.array(mask))

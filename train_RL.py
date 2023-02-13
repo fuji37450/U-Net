@@ -21,8 +21,7 @@ args = parse_args()
 
 def train():
 
-    BATCH_SIZE = 32
-    EPOCHS = args.n_epoch + 100
+    EPOCHS = args.n_epoch
 
     np.random.seed(0)
     torch.manual_seed(1)
@@ -30,7 +29,7 @@ def train():
     train_set = SignatureLoader(
         imgs_root=args.imgs_dir, masks_root=args.masks_dir, scale=0.25)
     train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=BATCH_SIZE, shuffle=True)
+        train_set, batch_size=args.batch_size, shuffle=True)
 
     model = UNet(n_class=1).to(device)
     model.load_state_dict(torch.load(f'pths/{args.model_name}.pth'))
@@ -42,10 +41,11 @@ def train():
     best_train_loss = 1e10
     for _ in tqdm(range(1, EPOCHS + 1)):
         epoch_samples = 0
+
+        metrics_refine = defaultdict(float)
         for imgs, true_masks in train_loader:
             imgs = imgs.to(device)
             true_masks = true_masks.to(device)
-            metrics_refine = defaultdict(float)
 
             model.eval()
             model_refine.train()
@@ -62,10 +62,11 @@ def train():
 
         train_loss = metrics_refine['dice'] / epoch_samples
         if train_loss < best_train_loss:
-            print("saving best train model")
+            print(
+                f'saving best train model: {1 - train_loss:.2f}.pth')
             best_train_loss = train_loss
             torch.save(model_refine.state_dict(),
-                       f'pths/train_refine_{metrics_refine["dice"]:.2f}.pth')
+                       f'pths/train_refine_BCSD_{1 - train_loss:.2f}.pth')
         print_metrics(metrics_refine, epoch_samples)
 
 
