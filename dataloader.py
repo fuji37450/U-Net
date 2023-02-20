@@ -6,12 +6,13 @@ import numpy as np
 
 
 class SignatureLoader(data.Dataset):
-    def __init__(self, imgs_root: str, masks_root: str, scale: float = 1.0):
+    def __init__(self, imgs_root: str, masks_root: str = '', scale: float = 1.0, mode: str = 'train'):
         super().__init__()
         self.dataset = imgs_root.split('/')[1]
         self.imgs_root = imgs_root
         self.masks_root = masks_root
         self.scale = scale
+        self.mode = mode
 
         if self.dataset == 'BCSD':
             self.ids = [filename.split('_')[1].split('.')[0]
@@ -62,8 +63,14 @@ class SignatureLoader(data.Dataset):
 
         img = Image.open(os.path.join(self.imgs_root, img_name)
                          ).convert('RGB').resize((512, 512))
+        img = self.preprocess(img, self.scale, is_mask=False)
+
+        if self.mode == 'test':
+            return torch.FloatTensor(np.array(img)), name
+
         mask = Image.open(os.path.join(
             self.masks_root, mask_name)).convert('L').resize((512, 512))
-        img = self.preprocess(img, self.scale, is_mask=False)
         mask = self.preprocess(mask, self.scale, is_mask=True)
+        if self.mode == 'valid':
+            return torch.FloatTensor(np.array(img)), torch.LongTensor(np.array(mask)), name
         return torch.FloatTensor(np.array(img)), torch.LongTensor(np.array(mask))

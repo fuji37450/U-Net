@@ -14,7 +14,11 @@ def parse_args():
                         help='directory of images')
     parser.add_argument('--masks_dir', default='data/BCSD/TrainSet/y_crop_resize', type=str,
                         help='directory of ground truth masks')
+    parser.add_argument('--result_dir', default='',
+                        type=str, help='directory of segmented image')
     parser.add_argument('--n_epoch', default=100, type=int,
+                        help='number of epoch to train')
+    parser.add_argument('--batch_size', default=32, type=int,
                         help='number of epoch to train')
     parser.add_argument('--model_name', default='',
                         type=str, help='pretrain model name')
@@ -26,15 +30,15 @@ def parse_args():
     return args
 
 
-def dice_loss(pred, target, smooth=1.):
-    pred = pred
-    target = target
-
+def dice_coef(pred, target, smooth=1.):
     intersection = (pred * target).sum(2)
-    loss = 1 - ((2. * intersection + smooth) /
-                (pred.sum(2) + target.sum(2) + smooth))
+    return ((2. * intersection + smooth) / (pred.sum(2) + target.sum(2) + smooth)).mean()
 
-    return loss.mean()
+
+def dice_loss(pred, target):
+    loss = 1 - dice_coef(pred, target)
+
+    return loss
 
 
 l1loss = torch.nn.L1Loss()
@@ -42,10 +46,11 @@ l1loss = torch.nn.L1Loss()
 
 def calc_loss(pred, target, metrics, bce_weight=0.5):
 
-    pred = pred.reshape(target.size()[0], 128, 128)
-    bce = F.binary_cross_entropy_with_logits(pred, target.float())
+    bce = F.binary_cross_entropy_with_logits(
+        pred.reshape(target.size()), target.float())
 
-    pred = torch.sigmoid(pred)
+    # pred = torch.sigmoid(pred)
+    pred = threshold_preds(pred, target.size()).to('cuda')
     dice = dice_loss(pred, target)
 
     loss = bce * bce_weight + dice * (1 - bce_weight)
@@ -86,8 +91,7 @@ def get_masked_image(img, mask):
     return np.asarray(result)
 
 
-def plot_side_by_side(img_arrays, filedir):
-    os.mkdir(filedir)
+def plot_side_by_side(img_arrays, img_names, filedir):
     nrow, ncol = 1, len(img_arrays)
 
     for i in range(len(img_arrays[0])):
@@ -101,5 +105,14 @@ def plot_side_by_side(img_arrays, filedir):
             else:
                 plots[col].imshow(img_arrays[col][i], cmap='gray')
 
-        plt.savefig(f'{filedir}{i}')
+        plt.savefig(f'{filedir}/{img_names[i]}.jpg')
         plt.close()
+
+
+def threshold_preds(preds, shape):
+    preds = np.asarray(
+        list(map(swap_func, torch.sigmoid(preds).data.cpu().numpy())))
+    # preds = np.asarray(list(map(swap_func, preds.data.cpu().numpy())))
+    masks = np.asarray(list(map(get_mask_from_pred, preds)))
+    preds = torch.from_numpy(masks).reshape(shape) / 255
+    return preds
